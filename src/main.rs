@@ -12,7 +12,9 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::pubsub::{Publisher, PubSubChannel, Subscriber};
 
 use embedded_graphics::draw_target::DrawTarget;
-use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
+use embedded_graphics::framebuffer::Framebuffer;
+use embedded_graphics::pixelcolor::raw::BigEndian;
+use embedded_graphics::pixelcolor::{Rgb565, RgbColor, WebColors};
 
 use esp_backtrace as _;
 use esp_println::println;
@@ -74,33 +76,27 @@ fn main() -> ! {
     let clocks = ClockControl::max(system.clock_control).freeze();
     let mut delay = Delay::new(&clocks);
 
+
+
+
+
     // setup logger
     // To change the log_level change the env section in .cargo/config.toml
     // or remove it and set ESP_LOGLEVEL manually before running cargo run
     // this requires a clean rebuild because of https://github.com/rust-lang/cargo/issues/10358
     esp_println::logger::init_logger_from_env();
     log::info!("Logger is setup");
-    println!("Hello world!");
-    let timer_group_0 = TimerGroup::new(peripherals.TIMG0, &clocks);
-    let wifi_timer_group = TimerGroup::new(peripherals.TIMG1, &clocks);
-
-    let init = initialize(
-        EspWifiInitFor::Wifi,
-        wifi_timer_group.timer0,
-        Rng::new(peripherals.RNG),
-        system.radio_clock_control,
-        &clocks,
-    ).unwrap();
-
-
 
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
     let mut led = io.pins.gpio38.into_push_pull_output();
+    info!("Setting led high");
     led.set_high().unwrap();
 
     //===================
 
     println!("GPIO init OK");
+
+    delay.delay_ms(2000_u32);
 
     println!("init display");
 
@@ -138,22 +134,66 @@ fn main() -> ! {
     )
     .with_dma(dma_channel.configure(false, descriptors, &mut [], DmaPriority::Priority0));
 
+    info!("SPI init");
     let mut display = RM67162Dma::new(spi, cs);
+    info!("display created");
 
     display.reset(&mut rst, &mut delay).unwrap();
+    info!("display reset");
     display.init(&mut delay).unwrap();
+    info!("display initialized");
     display
         .set_orientation(Orientation::Portrait)
         .unwrap();
+    info!("display oriented");
 
-    display.clear(Rgb565::BLACK).unwrap();
-    
-    let wifi = peripherals.WIFI;
-    let esp_now = EspNow::new(&init, wifi).unwrap();
+    // let clr_result = display.clear(Rgb565::BLACK);
+    // println!("Thing: {:?}",clr_result);
+    info!("display clearedx");
 
+
+    let mut fb = Framebuffer::<
+        Rgb565,
+        _,
+        BigEndian,
+        536,
+        240,
+        { embedded_graphics::framebuffer::buffer_size::<Rgb565>(536, 240) },
+    >::new();
+    println!("FB created");
+    fb.clear(Rgb565::CSS_LIGHT_GRAY).unwrap();
+
+    unsafe {
+        display.fill_with_framebuffer(fb.data()).unwrap();
+    }
+
+
+
+    println!("Hello world!");
+    let wifi_timer_group = TimerGroup::new(peripherals.TIMG1, &clocks);
+    info!("Timers created");
     let executor = make_static!(Executor::new());
+    let timer_group_0 = TimerGroup::new(peripherals.TIMG0, &clocks);
 
     embassy::init(&clocks, timer_group_0.timer0);
+
+    let init = initialize(
+        EspWifiInitFor::Wifi,
+        wifi_timer_group.timer0,
+        Rng::new(peripherals.RNG),
+        system.radio_clock_control,
+        &clocks,
+    ).unwrap();
+
+    let wifi = peripherals.WIFI;
+    info!("Starting espnow");
+    let esp_now = EspNow::new(&init, wifi).unwrap();
+
+
+    
+
+    
+
     let (_esp_manager, _esp_sender, esp_receiver) = esp_now.split();
     let command_channel: &MessageChannel = make_static!(PubSubChannel::new());
 
