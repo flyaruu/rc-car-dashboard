@@ -10,10 +10,9 @@ use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::pubsub::{Publisher, PubSubChannel, Subscriber};
 
+use embassy_time::Timer;
 use embedded_graphics::draw_target::DrawTarget;
-use embedded_graphics::framebuffer::Framebuffer;
-use embedded_graphics::pixelcolor::raw::BigEndian;
-use embedded_graphics::pixelcolor::{Rgb565, RgbColor, WebColors};
+use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
 
 use esp_backtrace as _;
 use esp_hal_common::Rtc;
@@ -170,12 +169,26 @@ async fn main(spawner: Spawner) {
     let esp_now = EspNow::new(&init, wifi).unwrap();
     let (_esp_manager, _esp_sender, esp_receiver) = esp_now.split();
     let command_channel: &MessageChannel = make_static!(PubSubChannel::new());
-    // executor.run(|spawner| {
-        spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),rtc)).unwrap();
-        spawner.spawn(receiver(esp_receiver,command_channel.publisher().unwrap())).unwrap();
-    // })
+    spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),rtc)).unwrap();
+    spawner.spawn(receiver(esp_receiver,command_channel.publisher().unwrap())).unwrap();
+    spawner.spawn(test_telemetry(command_channel.publisher().unwrap())).unwrap();
+
 }
 
+#[embassy_executor::task]
+async fn test_telemetry(publisher: MessagePublisher) {
+    loop {
+        for i in 0..24 {
+            publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(i*10))).await;
+            Timer::after_millis(50).await;
+        }
+        for i in (0..24).rev() {
+            publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(i*10))).await;
+            Timer::after_millis(50).await;
+        }
+
+    }
+}
 #[embassy_executor::task]
 async fn receiver(mut esp_receiver: EspNowReceiver<'static>, publisher: MessagePublisher)->! {
     info!("Starting receiver...");
