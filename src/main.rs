@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![feature(const_option)]
 
 extern crate alloc;
 
@@ -34,6 +35,8 @@ use crate::graphics::graphics_task;
 mod graphics;
 mod types;
 mod gauge;
+mod dashboard;
+mod status_screen;
 
 pub type MessageChannel = PubSubChannel<NoopRawMutex, Message, MAX_MESSAGES, MAX_SUBS, MAX_PUBS>;
 pub type MessageSubscriber = Subscriber<'static, NoopRawMutex, Message, MAX_MESSAGES, MAX_SUBS, MAX_PUBS>;
@@ -89,7 +92,6 @@ async fn main(spawner: Spawner) {
 
     println!("GPIO init OK");
 
-    // delay.delay_ms(2000_u32);
 
     println!("init display");
 
@@ -171,12 +173,23 @@ async fn main(spawner: Spawner) {
     let command_channel: &MessageChannel = make_static!(PubSubChannel::new());
     spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),rtc)).unwrap();
     spawner.spawn(receiver(esp_receiver,command_channel.publisher().unwrap())).unwrap();
-    spawner.spawn(test_telemetry(command_channel.publisher().unwrap())).unwrap();
+    spawner.spawn(test_speedo_telemetry(command_channel.publisher().unwrap())).unwrap();
+    spawner.spawn(test_speedo_odo(command_channel.publisher().unwrap())).unwrap();
 
 }
 
 #[embassy_executor::task]
-async fn test_telemetry(publisher: MessagePublisher) {
+async fn test_speedo_odo(publisher: MessagePublisher) {
+    let mut i = 0;
+    loop {
+        publisher.publish(Message::Telemetry(TelemetryMessage::Odo(i))).await;
+        Timer::after_millis(50).await;
+        i+=1;
+    }
+}
+
+#[embassy_executor::task]
+async fn test_speedo_telemetry(publisher: MessagePublisher) {
     loop {
         for i in 0..24 {
             publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(i*10))).await;
