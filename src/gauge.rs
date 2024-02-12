@@ -1,6 +1,6 @@
 use core::{f32::consts::PI, str::FromStr};
 
-use alloc::{format};
+use alloc::{format, string::ToString};
 use embedded_graphics::{framebuffer::Framebuffer, geometry::{Angle, Dimensions, Point, Size}, mono_font::{ascii::{FONT_10X20, FONT_8X13}, MonoTextStyle, MonoTextStyleBuilder}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565, RgbColor}, primitives::{Arc, Circle, Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StyledDrawable}, text::Text, Drawable};
 use esp_println::{print, println};
 use heapless::String;
@@ -10,21 +10,21 @@ use num_traits::Float;
 use crate::dashboard::{DashboardContext, I_L_OFFSET, I_N_OFFSET, I_OUTER_OFFSET, I_P_OFFSET};
 
 
-pub struct Gauge<const W: usize, const H: usize, const BUFFER: usize, const CLEAR_RADIUS: usize>  {
+pub struct Gauge<'a, const W: usize, const H: usize, const BUFFER: usize, const CLEAR_RADIUS: usize>  {
     pub bounding_box: Rectangle,
     pub value: i32,
-    pub texts: [String<3>; 13],
+    pub texts: [&'a str; 13],
     line1: String<6>,
     line2: String<6>,
     // pub framebuffer: Framebuffer<Rgb565,RawU16,BigEndian,W,H,BUFFER>
 }
 
-impl <const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS: usize>
-    Gauge<W,H,BUFFER,CLEAR_RADIUS> {
+impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS: usize>
+    Gauge<'a, W,H,BUFFER,CLEAR_RADIUS> {
 
     const CX: i32 = (W / 2) as i32;
     const CY: i32 = (H / 2) as i32;
-    pub fn new_speedo(location: Point, texts: [String<3>;13], line1: String<6>, line2: String<6>)->Self {
+    pub fn new_speedo(location: Point, texts: [&'a str;13], line1: String<6>, line2: String<6>)->Self {
         let size = Size::new(W as u32, H as u32);
         // let framebuffer = Framebuffer::new();
         Gauge {
@@ -93,8 +93,6 @@ impl <const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS: usi
 
 
     pub fn draw_dynamic(&mut self, framebuffer: &mut Framebuffer<Rgb565,RawU16,BigEndian,W,H,BUFFER>,  context: &DashboardContext<W,H>) {
-        // println!("draw dyn");
-        // print!(".");
         // Dynamic
         for i in 0..26 {
             let current_text_style = if i<20 {
@@ -104,7 +102,7 @@ impl <const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS: usi
             };
             if i % 2 == 0 {
                 // TODO time this, could store these:
-                let text = &self.texts[i>>1];
+                let text: &str =  self.texts[i>>1];
                 Text::with_alignment(&text, context.l_point[i*12], current_text_style, embedded_graphics::text::Alignment::Center)
                     .draw(framebuffer).unwrap();
             }            
@@ -116,10 +114,9 @@ impl <const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS: usi
         Arc::with_center(Point { x: Self::CX, y: Self::CY }, (W as u32-I_N_OFFSET) / 2, Angle::from_degrees(100.0), Angle::from_degrees(340.0))
             .draw_styled(&context.outer_style, framebuffer)
             .unwrap();
-
-        let speed_text = format!("{}",self.value);
-        self.set_line1(String::from_str(&speed_text).unwrap());
-        Text::with_alignment(&speed_text, context.centre, context.centre_text_style, embedded_graphics::text::Alignment::Center)
+        
+        self.set_line1(String::from(self.value));
+        Text::with_alignment(&self.line1, context.centre, context.centre_text_style, embedded_graphics::text::Alignment::Center)
             .draw(framebuffer).unwrap();
         Text::with_alignment(&self.line2, Point::new(context.centre.x, context.centre.y + 18), context.centre_text_style, embedded_graphics::text::Alignment::Center)
             .draw(framebuffer).unwrap();

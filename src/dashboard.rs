@@ -1,13 +1,14 @@
-use core::f32::consts::PI;
+use core::{f32::consts::PI, marker::PhantomData};
 
-use embedded_graphics::{draw_target::DrawTarget, framebuffer::{self, Framebuffer}, geometry::{Dimensions, Point}, mono_font::{ascii::{FONT_10X20, FONT_8X13}, MonoTextStyle, MonoTextStyleBuilder}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565, RgbColor}, primitives::{Circle, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle}};
-use esp_hal_common::gpio::{Output, PushPull};
-use esp_println::println;
+use embedded_graphics::{draw_target::DrawTarget, framebuffer::{self, Framebuffer}, geometry::{Dimensions, Point, Size}, mono_font::{ascii::{FONT_10X20, FONT_8X13}, MonoTextStyle, MonoTextStyleBuilder}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565, RgbColor, WebColors}, primitives::{Circle, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle}};
+use embedded_hal::digital::OutputPin;
+use esp_println::{print, println};
+use heapless::String;
 use num_traits::ToPrimitive;
 use num_traits::Float;
 use t_display_s3_amoled::rm67162::dma::RM67162Dma;
 
-use crate::gauge::Gauge;
+use crate::{gauge::Gauge, status_screen::{LightIndicator, StatusScreen}};
 
 pub const OUTER_OFFSET: f32 = 10.0;
 pub const P_OFFSET: f32 = 20.0;
@@ -21,45 +22,105 @@ pub const I_L_OFFSET: u32 = 40;
 pub const I_N_OFFSET: u32 = 70;
 
 
-struct Dashboard<const GAUGE_WIDTH: usize, const GAUGE_HEIGHT: usize, const GAUGE_FRAMEBUFFER_SIZE: usize, const GAUGE_CLEAR_RADIUS: usize> {
+pub struct Dashboard<'a, const GAUGE_WIDTH: usize, 
+    const GAUGE_HEIGHT: usize, 
+    const GAUGE_FRAMEBUFFER_SIZE: usize,
+    const GAUGE_CLEAR_RADIUS: usize,
+    const STATUS_SCREEN_WIDTH: usize,
+    const STATUS_SCREEN_HEIGHT: usize,
+    const STATS_SCREEN_FRAMEBUFFER_SIZE: usize,
+    CsPin: OutputPin,
+    > {
     // pub struct Gauge<const W: usize, const H: usize, const BUFFER: usize, const CLEAR_RADIUS: usize>  {
-    left_gauge: Gauge<GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS>,
-    right_gauge: Gauge<GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS>,
+    left_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS>,
+    right_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS>,
     framebuffer: Framebuffer<Rgb565,RawU16,BigEndian,GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE>,
-    mid_buffer: Framebuffer<Rgb565, RawU16, BigEndian, 80, 80, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(80, 80) }>,
+    status_screen: StatusScreen<STATUS_SCREEN_WIDTH,STATUS_SCREEN_HEIGHT, STATS_SCREEN_FRAMEBUFFER_SIZE,GAUGE_WIDTH,GAUGE_HEIGHT>,
+    mid_buffer: Framebuffer<Rgb565, RawU16, BigEndian, STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT, STATS_SCREEN_FRAMEBUFFER_SIZE>,
+    _phantom: PhantomData<CsPin>,
 
 }
 
-impl <const GAUGE_WIDTH: usize, const GAUGE_HEIGHT: usize, const GAUGE_FRAMEBUFFER_SIZE: usize, const GAUGE_CLEAR_RADIUS: usize>Dashboard<GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS> {
+impl <'a, const GAUGE_WIDTH: usize, 
+    const GAUGE_HEIGHT: usize,
+    const GAUGE_FRAMEBUFFER_SIZE: usize,
+    const GAUGE_CLEAR_RADIUS: usize,
+    const STATUS_SCREEN_WIDTH: usize,
+    const STATUS_SCREEN_HEIGHT: usize,
+    const STATUS_SCREEN_FRAMEBUFFER_SIZE: usize,
+    CsPin: OutputPin
+    > Dashboard<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS,STATUS_SCREEN_WIDTH,STATUS_SCREEN_HEIGHT,STATUS_SCREEN_FRAMEBUFFER_SIZE, CsPin> {
     pub fn new()->Self {
         Self {
-            left_gauge: Gauge::new_speedo(Point::new(20, 10),["0".into(),"20".into(),"40".into(),"60".into(),"80".into(),"100".into(),"120".into(),"140".into(),"160".into(),"180".into(),"200".into(),"220".into(),"240".into()], "000".into(), "KM/H".into(),),
-            right_gauge: Gauge::new_speedo(Point::new(536-GAUGE_WIDTH.to_i32().unwrap(), 10),["0".into(),"1".into(),"2".into(),"3".into(),"4".into(),"5".into(),"6".into(),"7".into(),"8".into(),"9".into(),"10".into(),"11".into(),"12".into()] , "".into(), "000000".into(),),
+            left_gauge: Gauge::new_speedo(Point::new(0, 10),["0","20","40","60","80","100","120","140","160","180","200","220","240"], "000".into(), "KM/H".into(),),
+            right_gauge: Gauge::new_speedo(Point::new(536-GAUGE_WIDTH.to_i32().unwrap(), 10),["0","1","2","3","4","5","6","7","8","9","10","11","12"] , "".into(), "000000".into(),),
             framebuffer: Framebuffer::new(),
+            status_screen: StatusScreen::new(),
             mid_buffer: Framebuffer::new(),
+            _phantom: PhantomData,
         }
+    }
+
+    pub fn set_left_line1(&mut self, text: String<6>) {
+        self.left_gauge.set_line1(text);
+    }
+
+    pub fn set_left_line2(&mut self, text: String<6>) {
+        self.left_gauge.set_line2(text);
+    }
+
+    pub fn set_right_line1(&mut self, text: String<6>) {
+        self.right_gauge.set_line1(text);
+    }
+
+    pub fn set_right_line2(&mut self, text: String<6>) {
+        self.right_gauge.set_line2(text);
+    }
+
+    pub fn set_left_value(&mut self, value: i32) {
+        self.left_gauge.value = value;
+    }
+
+    pub fn set_right_value(&mut self, value: i32) {
+        self.left_gauge.value = value;
     }
 
     pub fn draw_static(&mut self, dashboard_context: &DashboardContext<GAUGE_WIDTH,GAUGE_HEIGHT>) {
         self.framebuffer.clear(Rgb565::BLACK).unwrap();
-        self.left_gauge.draw_static(&mut self.framebuffer, &dashboard_context);
-        self.right_gauge.draw_static(&mut self.framebuffer, &dashboard_context);
+        self.left_gauge.draw_static(&mut self.framebuffer, dashboard_context);
+        self.right_gauge.draw_static(&mut self.framebuffer, dashboard_context);
     
     }
 
-    pub fn redraw(&mut self, display: &mut RM67162Dma<'static,hal::gpio::AnyPin<Output<PushPull>>>, dashboard_context: &DashboardContext<GAUGE_WIDTH,GAUGE_HEIGHT>) {
+    pub fn redraw(&mut self, display: &mut RM67162Dma<'static,CsPin>, dashboard_context: &DashboardContext<GAUGE_WIDTH,GAUGE_HEIGHT>) {
         self.left_gauge.draw_clear_mask(&mut self.framebuffer, dashboard_context);
         self.left_gauge.draw_dynamic(&mut self.framebuffer, dashboard_context);
         unsafe {
             display.framebuffer_for_viewport(self.framebuffer.data(), self.left_gauge.bounding_box).unwrap();
         }
 
-        self.right_gauge.draw_clear_mask(&mut self.framebuffer, &dashboard_context);
-        self.right_gauge.draw_dynamic(&mut self.framebuffer, &dashboard_context);
+        self.right_gauge.draw_clear_mask(&mut self.framebuffer, dashboard_context);
+        self.right_gauge.draw_dynamic(&mut self.framebuffer, dashboard_context);
         unsafe {
             display.framebuffer_for_viewport(self.framebuffer.data(), self.right_gauge.bounding_box).unwrap();
         }
+        self.status_screen.draw(&mut self.mid_buffer, dashboard_context);
 
+        unsafe {
+            display.framebuffer_for_viewport(self.mid_buffer.data(), Rectangle { top_left: Point { x: 228, y: 30 }, size: Size { width: STATUS_SCREEN_WIDTH as u32, height: STATUS_SCREEN_HEIGHT as u32 } }).unwrap();
+        }
+    }
+
+    pub fn set_left_blinker(&mut self, value: LightIndicator) {
+        self.status_screen.set_left_blinker(value);
+    }
+    
+    pub fn set_right_blinker(&mut self, value: LightIndicator) {
+        self.status_screen.set_right_blinker(value);
+    }
+
+    pub fn set_headlight_indicator(&mut self, value: LightIndicator) {
+        self.status_screen.set_headlight_indicator(value);
     }
 
 }
@@ -81,6 +142,12 @@ pub struct DashboardContext<'a, const GAUGE_WIDTH: usize,const GAUGE_HEIGHT: usi
     pub tick_style: PrimitiveStyle<Rgb565>,
     pub red_tick_style: PrimitiveStyle<Rgb565>,
     pub needle_style: PrimitiveStyle<Rgb565>,
+    pub headlight_on_style: PrimitiveStyle<Rgb565>,
+    pub indicator_on_style: PrimitiveStyle<Rgb565>,
+    pub blinker_on_style: PrimitiveStyle<Rgb565>,
+    pub blinker_off_style: PrimitiveStyle<Rgb565>,
+    pub headlight_high_style: PrimitiveStyle<Rgb565>,
+    pub light_off_style: PrimitiveStyle<Rgb565>,
     pub text_style: MonoTextStyle<'a,Rgb565>,
     pub red_text_style: MonoTextStyle<'a, Rgb565>,
     pub centre_text_style: MonoTextStyle<'a, Rgb565>,
@@ -125,6 +192,35 @@ impl <'a, const GAUGE_WIDTH: usize,const GAUGE_HEIGHT: usize> DashboardContext<'
             .stroke_color(needle_color)
             .stroke_width(4)
             .build();
+        let headlight_on_style = PrimitiveStyleBuilder::new()
+            .fill_color(Rgb565::GREEN)
+            .stroke_width(1)
+            .stroke_color(Rgb565::GREEN)
+            .build();
+        let headlight_high_style = PrimitiveStyleBuilder::new()
+            .fill_color(gauge_color)
+            .stroke_width(1)
+            .stroke_color(gauge_color)
+            .build();
+
+        let indicator_on_style = PrimitiveStyleBuilder::new()
+            .stroke_color(Rgb565::GREEN)
+            .stroke_width(2)
+            .build();
+        let blinker_on_style = PrimitiveStyleBuilder::new()
+            .fill_color(Rgb565::GREEN)
+            .build();
+        let blinker_off_style = PrimitiveStyleBuilder::new()
+            .fill_color(Rgb565::new(0x4, 0x8, 0x4))
+            .build();
+        // let color = Rgb565::new(0x33, 0x33, 0x33);
+
+
+        let light_off_style = PrimitiveStyleBuilder::new()
+            .stroke_color(Rgb565::new(0x4, 0x8, 0x4))
+            .stroke_width(1)
+            .fill_color(Rgb565::new(0x4, 0x8, 0x4))
+            .build();
         let text_style = MonoTextStyleBuilder::new()
             .text_color(Rgb565::WHITE)
             .font(&FONT_8X13)
@@ -155,6 +251,12 @@ impl <'a, const GAUGE_WIDTH: usize,const GAUGE_HEIGHT: usize> DashboardContext<'
             tick_style,
             red_tick_style,
             needle_style,
+            headlight_on_style,
+            headlight_high_style,
+            indicator_on_style,
+            blinker_on_style,
+            blinker_off_style,
+            light_off_style,            
             text_style,
             red_text_style,
             centre_text_style,

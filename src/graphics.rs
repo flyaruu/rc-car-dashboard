@@ -13,7 +13,7 @@ use log::info;
 use num_traits::ToPrimitive;
 use t_display_s3_amoled::rm67162::dma::RM67162Dma;
 
-use crate::{dashboard::DashboardContext, gauge::Gauge, MessageSubscriber};
+use crate::{dashboard::{self, Dashboard, DashboardContext}, gauge::Gauge, status_screen::LightIndicator, MessageSubscriber};
 
 
 
@@ -23,68 +23,78 @@ pub async fn graphics_task(
     mut subscriber: MessageSubscriber,
     rtc: &'static Rtc<'static>,
 ) {
-    const GAUGE_SIZE: usize = 234;
+    const GAUGE_SIZE: usize = 220;
     const GAUGE_CLEAR_SIZE: usize = 160; //GAUGE_SIZE - I_L_OFFSET.to_usize().unwrap();
+    const STATUS_SCREEN_WIDTH: usize = 80;
+    const STATUS_SCREEN_HEIGHT: usize = 160;
+
     let dashboard_context = DashboardContext::new();
 
-    let mut speedo: Gauge<
-        GAUGE_SIZE, GAUGE_SIZE,  { embedded_graphics::framebuffer::buffer_size::<Rgb565>(GAUGE_SIZE, GAUGE_SIZE) },
-        GAUGE_CLEAR_SIZE> = Gauge::new_speedo(Point::new(20, 10),["0".into(),"20".into(),"40".into(),"60".into(),"80".into(),"100".into(),"120".into(),"140".into(),"160".into(),"180".into(),"200".into(),"220".into(),"240".into()]
-            , "000".into(), "KM/H".into(),
-    );
-    let mut speedo2: Gauge<
-        GAUGE_SIZE, GAUGE_SIZE,  { embedded_graphics::framebuffer::buffer_size::<Rgb565>(GAUGE_SIZE, GAUGE_SIZE) },
-        GAUGE_CLEAR_SIZE> = Gauge::new_speedo(Point::new(536-GAUGE_SIZE.to_i32().unwrap(), 10),["0".into(),"1".into(),"2".into(),"3".into(),"4".into(),"5".into(),"6".into(),"7".into(),"8".into(),"9".into(),"10".into(),"11".into(),"12".into()]
-        , "".into(), "000000".into(),);
-    let mut framebuffer = Framebuffer::new();
-    framebuffer.clear(Rgb565::BLACK).unwrap();
-    // let mut clear_framebuffer = Framebuffer::new();
-    speedo.draw_static(&mut framebuffer, &dashboard_context);
-    speedo2.draw_static(&mut framebuffer, &dashboard_context);
-    Timer::after_millis(500).await;
-    // speedo.draw_clear_mask(&mut clear_framebuffer, &dashboard_context);
-    // let mid_buffer: Framebuffer<Rgb565, RawU16, BigEndian, 80, 80, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(80, 80) }> = Framebuffer::new();
-    // delay.delay_ms(2000_u32);
+    let mut dashboard: Dashboard<GAUGE_SIZE, GAUGE_SIZE, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(GAUGE_SIZE, GAUGE_SIZE) }, GAUGE_CLEAR_SIZE, STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT) },Gpio6<Output<PushPull>>> = Dashboard::new();    
+    dashboard.draw_static(&dashboard_context);
     loop {
+        dashboard.redraw(&mut display, &dashboard_context);
         if subscriber.available() > 0 {
             let message = subscriber.next_message_pure().await;
             match message {
                 protocol::Message::Telemetry(telemetry) => match telemetry {
                     protocol::TelemetryMessage::MotorSetting(_) => {},
                     protocol::TelemetryMessage::MotorRpm(rpm) => {
-                        speedo2.value = rpm.to_i32().unwrap();
+                        dashboard.set_right_value(rpm.to_i32().unwrap());
     
                     },
                     protocol::TelemetryMessage::MotorOdo(_) => {},
                     protocol::TelemetryMessage::Rpm(rpm) => {
-                        speedo.value = rpm.to_i32().unwrap();
+                        dashboard.set_left_value(rpm.to_i32().unwrap());
                     },
                     protocol::TelemetryMessage::Odo(odo) => {
-                        speedo2.set_line2(format!("{:06}",odo.to_i32().unwrap()).as_str().into()    )
-    
+                        // info!("Odo: {}",odo);
+                        dashboard.set_right_line2(format!("{:06}",odo.to_i32().unwrap()).as_str().into());
+                    },
+                    protocol::TelemetryMessage::Blink(blink_state) => {
+                        match blink_state {
+                            protocol::BlinkState::LeftOn => {dashboard.set_left_blinker(LightIndicator::On); dashboard.set_right_blinker(LightIndicator::Off);},
+                            protocol::BlinkState::RightOn => {dashboard.set_left_blinker(LightIndicator::Off); dashboard.set_right_blinker(LightIndicator::On);},
+                            protocol::BlinkState::AllOff => {dashboard.set_left_blinker(LightIndicator::Off); dashboard.set_right_blinker(LightIndicator::Off);},
+                        }
                     },
                     _ => {},
                 },
-                _ => {}
+                protocol::Message::Control(c) => match c {
+                    protocol::ControlMessage::HeadlightCommand(cmd) => {
+                        match cmd {
+                            protocol::Headlights::Low => dashboard.set_headlight_indicator(LightIndicator::On),
+                            protocol::Headlights::High => dashboard.set_headlight_indicator(LightIndicator::High),
+                            protocol::Headlights::Off => dashboard.set_headlight_indicator(LightIndicator::Off),
+                        }                        
+                    },
+                    protocol::ControlMessage::BlinkerCommand(_) => {},
+                    _ => {}
+                    // protocol::ControlMessage::BrakelightCommand(_) => todo!(),
+                    // protocol::ControlMessage::ReverselightCommand(_) => todo!(),
+                    // protocol::ControlMessage::RecalibrateMotor => todo!(),
+                    // protocol::ControlMessage::SteeringPosition(_) => todo!(),
+                    // protocol::ControlMessage::MotorPower(_) => todo!(),
+
+                }
             }
     
+        } else {
+            // Make sure there is at least _something_ yielding
+            Timer::after_millis(1).await;
         }
         // let now = rtc.get_time_us();
-        Timer::after_millis(1).await;
-        speedo.draw_clear_mask(&mut framebuffer, &dashboard_context);
-        speedo.draw_dynamic(&mut framebuffer, &dashboard_context);
-        unsafe {
-            display.framebuffer_for_viewport(framebuffer.data(), speedo.bounding_box).unwrap();
-        }
+        // speedo.draw_clear_mask(&mut framebuffer, &dashboard_context);
+        // speedo.draw_dynamic(&mut framebuffer, &dashboard_context);
+        // unsafe {
+        //     display.framebuffer_for_viewport(framebuffer.data(), speedo.bounding_box).unwrap();
+        // }
 
-        speedo2.draw_clear_mask(&mut framebuffer, &dashboard_context);
-        speedo2.draw_dynamic(&mut framebuffer, &dashboard_context);
-        unsafe {
-            display.framebuffer_for_viewport(framebuffer.data(), speedo2.bounding_box).unwrap();
-        }
-        // let drawn = rtc.get_time_us();
-        // let flushed = rtc.get_time_us();
-        print!(".");
-        // info!("Frame timings flush: {} draw: {} ",flushed-drawn, drawn-now);
+        // speedo2.draw_clear_mask(&mut framebuffer, &dashboard_context);
+        // speedo2.draw_dynamic(&mut framebuffer, &dashboard_context);
+        // unsafe {
+        //     display.framebuffer_for_viewport(framebuffer.data(), speedo2.bounding_box).unwrap();
+        // }
+        // print!(".");
     }
 }

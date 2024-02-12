@@ -173,8 +173,8 @@ async fn main(spawner: Spawner) {
     let command_channel: &MessageChannel = make_static!(PubSubChannel::new());
     spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),rtc)).unwrap();
     spawner.spawn(receiver(esp_receiver,command_channel.publisher().unwrap())).unwrap();
-    spawner.spawn(test_speedo_telemetry(command_channel.publisher().unwrap())).unwrap();
-    spawner.spawn(test_speedo_odo(command_channel.publisher().unwrap())).unwrap();
+    // spawner.spawn(test_speedo_telemetry(command_channel.publisher().unwrap())).unwrap();
+    // spawner.spawn(test_speedo_odo(command_channel.publisher().unwrap())).unwrap();
 
 }
 
@@ -210,7 +210,6 @@ async fn receiver(mut esp_receiver: EspNowReceiver<'static>, publisher: MessageP
 
         let _sender = msg.info.src_address;
         let msg = Message::from_slice(&msg.data);
-        println!("Reeived: {:?}",msg);
         match msg {
             Ok(msg) => {
                 publisher.publish(msg).await;
