@@ -1,4 +1,4 @@
-use embedded_graphics::{framebuffer::Framebuffer, geometry::{Point, Size}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565, RgbColor}, primitives::{CornerRadii, Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, RoundedRectangle, StyledDrawable, Triangle}};
+use embedded_graphics::{framebuffer::Framebuffer, geometry::{Point, Size}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565}, primitives::{CornerRadii, Line, Rectangle, RoundedRectangle, StyledDrawable, Triangle}};
 
 use crate::dashboard::DashboardContext;
 

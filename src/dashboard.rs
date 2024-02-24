@@ -1,8 +1,9 @@
 use core::{f32::consts::PI, marker::PhantomData};
 
-use embedded_graphics::{draw_target::DrawTarget, framebuffer::{self, Framebuffer}, geometry::{Dimensions, Point, Size}, mono_font::{ascii::{FONT_10X20, FONT_8X13}, MonoTextStyle, MonoTextStyleBuilder}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565, RgbColor, WebColors}, primitives::{Circle, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle}};
+use embassy_executor::Spawner;
+use embedded_graphics::{draw_target::DrawTarget, framebuffer::Framebuffer, geometry::{Dimensions, Point, Size}, mono_font::{ascii::{FONT_10X20, FONT_8X13}, MonoTextStyle, MonoTextStyleBuilder}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565, RgbColor}, primitives::{Circle, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle}};
 use embedded_hal::digital::OutputPin;
-use esp_println::{print, println};
+use esp_println::println;
 use heapless::String;
 use num_traits::ToPrimitive;
 use num_traits::Float;
@@ -32,8 +33,8 @@ pub struct Dashboard<'a, const GAUGE_WIDTH: usize,
     CsPin: OutputPin,
     > {
     // pub struct Gauge<const W: usize, const H: usize, const BUFFER: usize, const CLEAR_RADIUS: usize>  {
-    left_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS>,
-    right_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS>,
+    left_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS,240>,
+    right_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS,1200>,
     framebuffer: Framebuffer<Rgb565,RawU16,BigEndian,GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE>,
     status_screen: StatusScreen<STATUS_SCREEN_WIDTH,STATUS_SCREEN_HEIGHT, STATS_SCREEN_FRAMEBUFFER_SIZE,GAUGE_WIDTH,GAUGE_HEIGHT>,
     mid_buffer: Framebuffer<Rgb565, RawU16, BigEndian, STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT, STATS_SCREEN_FRAMEBUFFER_SIZE>,
@@ -78,11 +79,11 @@ impl <'a, const GAUGE_WIDTH: usize,
     }
 
     pub fn set_left_value(&mut self, value: i32) {
-        self.left_gauge.value = value;
+        self.left_gauge.set_value(value);
     }
 
     pub fn set_right_value(&mut self, value: i32) {
-        self.left_gauge.value = value;
+        self.right_gauge.set_value(value);
     }
 
     pub fn draw_static(&mut self, dashboard_context: &DashboardContext<GAUGE_WIDTH,GAUGE_HEIGHT>) {
@@ -90,6 +91,11 @@ impl <'a, const GAUGE_WIDTH: usize,
         self.left_gauge.draw_static(&mut self.framebuffer, dashboard_context);
         self.right_gauge.draw_static(&mut self.framebuffer, dashboard_context);
     
+    }
+
+    pub fn update_indicated(&mut self) {
+        self.left_gauge.update_indicated();
+        self.right_gauge.update_indicated();
     }
 
     pub fn redraw(&mut self, display: &mut RM67162Dma<'static,CsPin>, dashboard_context: &DashboardContext<GAUGE_WIDTH,GAUGE_HEIGHT>) {
@@ -284,10 +290,6 @@ impl <'a, const GAUGE_WIDTH: usize,const GAUGE_HEIGHT: usize> DashboardContext<'
             };
         }
         context
-    }
-
-    pub fn clearing_boundaries(&self)->Rectangle {
-        self.clearing_circle_bounds
     }
 }
 

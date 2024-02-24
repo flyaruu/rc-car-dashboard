@@ -2,52 +2,76 @@
 
 
 use alloc::format;
-use embassy_sync::pubsub::subscriber;
-use embassy_time::{Delay, Timer};
-use embedded_graphics::{draw_target::DrawTarget, framebuffer::Framebuffer, geometry::{Point, Size}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565, RgbColor}, primitives::Rectangle};
-use esp_hal_common::{delay, Rtc};
-use esp_println::print;
+
+use embassy_executor::{task, Spawner};
+use embassy_sync::{blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex}, signal::Signal};
+use embassy_time::Timer;
+use embedded_graphics::pixelcolor::Rgb565;
+use esp_hal_common::Rtc;
+
 use hal::gpio::{Gpio6, Output, PushPull};
+
 
 use log::info;
 use num_traits::ToPrimitive;
 use t_display_s3_amoled::rm67162::dma::RM67162Dma;
 
-use crate::{dashboard::{self, Dashboard, DashboardContext}, gauge::Gauge, status_screen::LightIndicator, MessageSubscriber};
+use crate::{dashboard::{Dashboard, DashboardContext}, status_screen::LightIndicator, MessageSubscriber};
+
+pub static VALUE_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 
 
-#[embassy_executor::task]
+#[task]
+async fn value_updater() {
+    loop {
+        VALUE_SIGNAL.signal(());
+        Timer::after_millis(20).await;
+    }
+}
+
+#[task]
 pub async fn graphics_task(
     mut display: RM67162Dma<'static,Gpio6<Output<PushPull>>>, 
     mut subscriber: MessageSubscriber,
-    rtc: &'static Rtc<'static>,
+    spawner: Spawner,
+    _rtc: &'static Rtc<'static>,
 ) {
     const GAUGE_SIZE: usize = 220;
     const GAUGE_CLEAR_SIZE: usize = 160; //GAUGE_SIZE - I_L_OFFSET.to_usize().unwrap();
     const STATUS_SCREEN_WIDTH: usize = 80;
     const STATUS_SCREEN_HEIGHT: usize = 160;
-
+    
+    spawner.spawn(value_updater()).unwrap();
+    info!("Value updater started");
     let dashboard_context = DashboardContext::new();
 
     let mut dashboard: Dashboard<GAUGE_SIZE, GAUGE_SIZE, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(GAUGE_SIZE, GAUGE_SIZE) }, GAUGE_CLEAR_SIZE, STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT) },Gpio6<Output<PushPull>>> = Dashboard::new();    
     dashboard.draw_static(&dashboard_context);
+    info!("Starting graphics loop");
     loop {
         dashboard.redraw(&mut display, &dashboard_context);
+        if VALUE_SIGNAL.signaled() {
+            dashboard.update_indicated();
+            VALUE_SIGNAL.reset();
+        }
         if subscriber.available() > 0 {
             let message = subscriber.next_message_pure().await;
             match message {
                 protocol::Message::Telemetry(telemetry) => match telemetry {
                     protocol::TelemetryMessage::MotorSetting(_) => {},
                     protocol::TelemetryMessage::MotorRpm(rpm) => {
+                        info!("Received motor rpm: {}",rpm);
                         dashboard.set_right_value(rpm.to_i32().unwrap());
     
                     },
                     protocol::TelemetryMessage::MotorOdo(_) => {},
                     protocol::TelemetryMessage::Rpm(rpm) => {
+                        info!("Received speed rpm: {}",rpm);
                         dashboard.set_left_value(rpm.to_i32().unwrap());
                     },
                     protocol::TelemetryMessage::Odo(odo) => {
+                        info!("Received speed odo: {}",odo);
                         // info!("Odo: {}",odo);
                         dashboard.set_right_line2(format!("{:06}",odo.to_i32().unwrap()).as_str().into());
                     },

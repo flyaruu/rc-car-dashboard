@@ -7,10 +7,11 @@ extern crate alloc;
 
 
 use core::mem::MaybeUninit;
-use embassy_executor::Spawner;
+use embassy_executor::{task, Spawner};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::pubsub::{Publisher, PubSubChannel, Subscriber};
 
+use embassy_sync::signal::Signal;
 use embassy_time::Timer;
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
@@ -97,9 +98,9 @@ async fn main(spawner: Spawner) {
 
 
 
-    println!("Hello world!");
+    // println!("Hello world!");
     let wifi_timer_group = TimerGroup::new(peripherals.TIMG1, &clocks).timer0;
-    println!("Hello world2");
+    // println!("Hello world2");
     let init = initialize(
         EspWifiInitFor::Wifi,
         wifi_timer_group,
@@ -171,19 +172,21 @@ async fn main(spawner: Spawner) {
     let esp_now = EspNow::new(&init, wifi).unwrap();
     let (_esp_manager, _esp_sender, esp_receiver) = esp_now.split();
     let command_channel: &MessageChannel = make_static!(PubSubChannel::new());
-    spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),rtc)).unwrap();
+    delay.delay_ms(500_u32);
+    spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),spawner,rtc)).unwrap();
     spawner.spawn(receiver(esp_receiver,command_channel.publisher().unwrap())).unwrap();
     // spawner.spawn(test_speedo_telemetry(command_channel.publisher().unwrap())).unwrap();
     // spawner.spawn(test_speedo_odo(command_channel.publisher().unwrap())).unwrap();
 
 }
 
+
 #[embassy_executor::task]
 async fn test_speedo_odo(publisher: MessagePublisher) {
     let mut i = 0;
     loop {
         publisher.publish(Message::Telemetry(TelemetryMessage::Odo(i))).await;
-        Timer::after_millis(50).await;
+        Timer::after_millis(5000).await;
         i+=1;
     }
 }
@@ -193,11 +196,11 @@ async fn test_speedo_telemetry(publisher: MessagePublisher) {
     loop {
         for i in 0..24 {
             publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(i*10))).await;
-            Timer::after_millis(50).await;
+            Timer::after_millis(5000).await;
         }
         for i in (0..24).rev() {
             publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(i*10))).await;
-            Timer::after_millis(50).await;
+            Timer::after_millis(500).await;
         }
 
     }
