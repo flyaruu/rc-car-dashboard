@@ -126,6 +126,9 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
         }
         // let gauge_angle: usize = (self.indicated_value.to_f32().unwrap() * 1.2).to_usize().unwrap() % 360;
         let gauge_angle3: usize = (self.indicated_value.to_f32().unwrap() * 360.0 / MAX_VALUE.to_f32().unwrap()).to_usize().unwrap() % 360;
+        // Big mistery: Uncommenting the following code will cause the screen to stop working.
+        // Even if the code is _never executed_
+        // Compiler bug? Weird linker thing? I give up
         // if self.indicated_value > 10000 {
         //     let gauge_angle2: usize = (self.indicated_value * 360).try_into().unwrap();
         // }
