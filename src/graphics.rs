@@ -65,15 +65,16 @@ pub async fn graphics_task(
                         dashboard.set_right_value(rpm.to_i32().unwrap());
     
                     },
-                    protocol::TelemetryMessage::MotorOdo(_) => {},
+                    protocol::TelemetryMessage::MotorOdo(odo) => {
+                        dashboard.set_right_line2(format!("{:06}",odo.to_i32().unwrap()).as_str().into());
+                    },
                     protocol::TelemetryMessage::Rpm(rpm) => {
                         info!("Received speed rpm: {}",rpm);
                         dashboard.set_left_value(rpm.to_i32().unwrap());
                     },
-                    protocol::TelemetryMessage::Odo(odo) => {
-                        info!("Received speed odo: {}",odo);
+                    protocol::TelemetryMessage::Odo(_) => {
+                        // info!("Received odo: {}",odo);
                         // info!("Odo: {}",odo);
-                        dashboard.set_right_line2(format!("{:06}",odo.to_i32().unwrap()).as_str().into());
                     },
                     protocol::TelemetryMessage::Blink(blink_state) => {
                         match blink_state {

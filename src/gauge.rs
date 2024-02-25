@@ -136,7 +136,7 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
         //     let gauge_angle2: usize = (self.indicated_value * 360).try_into().unwrap();
         // }
         // let gauge_angle2: usize = (self.indicated_value * 360 / MAX_VALUE as i32 % 360).try_into().unwrap();
-        info!("INDICATED: {} SCALE_MAX: {}, GAUGE ANGLE: {gauge_angle3}",self.indicated_value, self.scaled_max);
+        // info!("INDICATED: {} SCALE_MAX: {}, GAUGE ANGLE: {gauge_angle3}",self.indicated_value, self.scaled_max);
         Line::new(context.l_point[gauge_angle3], context.n_point[gauge_angle3])
             .draw_styled(&context.needle_style, framebuffer)
             .unwrap();
@@ -144,7 +144,7 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
             .draw_styled(&context.outer_style, framebuffer)
             .unwrap();
         
-        // self.set_line1(String::from(self.value));
+        self.set_line1(String::from(self.value));
         Text::with_alignment(&self.line1, context.centre, context.centre_text_style, embedded_graphics::text::Alignment::Center)
             .draw(framebuffer).unwrap();
         Text::with_alignment(&self.line2, Point::new(context.centre.x, context.centre.y + 18), context.centre_text_style, embedded_graphics::text::Alignment::Center)
