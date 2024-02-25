@@ -22,6 +22,9 @@ pub const I_P_OFFSET: u32 = 20;
 pub const I_L_OFFSET: u32 = 40;
 pub const I_N_OFFSET: u32 = 70;
 
+pub const LEFT_MAX_GAUGE_VALUE: usize = 240;
+pub const RIGHT_MAX_GAUGE_VALUE: usize = 1500;
+
 
 pub struct Dashboard<'a, const GAUGE_WIDTH: usize, 
     const GAUGE_HEIGHT: usize, 
@@ -33,8 +36,8 @@ pub struct Dashboard<'a, const GAUGE_WIDTH: usize,
     CsPin: OutputPin,
     > {
     // pub struct Gauge<const W: usize, const H: usize, const BUFFER: usize, const CLEAR_RADIUS: usize>  {
-    left_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS,240>,
-    right_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS,1200>,
+    left_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS,LEFT_MAX_GAUGE_VALUE>,
+    right_gauge: Gauge<'a, GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE,GAUGE_CLEAR_RADIUS,RIGHT_MAX_GAUGE_VALUE>,
     framebuffer: Framebuffer<Rgb565,RawU16,BigEndian,GAUGE_WIDTH,GAUGE_HEIGHT,GAUGE_FRAMEBUFFER_SIZE>,
     status_screen: StatusScreen<STATUS_SCREEN_WIDTH,STATUS_SCREEN_HEIGHT, STATS_SCREEN_FRAMEBUFFER_SIZE,GAUGE_WIDTH,GAUGE_HEIGHT>,
     mid_buffer: Framebuffer<Rgb565, RawU16, BigEndian, STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT, STATS_SCREEN_FRAMEBUFFER_SIZE>,

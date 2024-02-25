@@ -18,7 +18,7 @@ pub struct Gauge<'a, const W: usize, const H: usize, const BUFFER: usize, const 
     pub texts: [&'a str; 13],
     line1: String<6>,
     line2: String<6>,
-    // pub framebuffer: Framebuffer<Rgb565,RawU16,BigEndian,W,H,BUFFER>
+    scaled_max: u64,
 }
 
 impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS: usize, const MAX_VALUE: usize>
@@ -26,9 +26,11 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
 
     const CX: i32 = (W / 2) as i32;
     const CY: i32 = (H / 2) as i32;
+
     pub fn new_speedo(location: Point, texts: [&'a str;13], line1: String<6>, line2: String<6>)->Self {
         let size = Size::new(W as u32, H as u32);
         // let framebuffer = Framebuffer::new();
+        let max_value_scaled: u64 = (MAX_VALUE * 360 / 300).to_u64().unwrap(); // scale max value to the (300 deg) range of the gauge
         Gauge {
             bounding_box: Rectangle::new(location, size),
             // framebuffer,
@@ -37,6 +39,7 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
             texts,
             line1,
             line2,
+            scaled_max: max_value_scaled,
 
         }
     }
@@ -125,15 +128,15 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
             }            
         }
         // let gauge_angle: usize = (self.indicated_value.to_f32().unwrap() * 1.2).to_usize().unwrap() % 360;
-        let gauge_angle3: usize = (self.indicated_value.to_f32().unwrap() * 360.0 / MAX_VALUE.to_f32().unwrap()).to_usize().unwrap() % 360;
-        // Big mistery: Uncommenting the following code will cause the screen to stop working.
+        let gauge_angle3: usize = (self.indicated_value.to_f32().unwrap() * 360.0 / self.scaled_max.to_f32().unwrap()).to_usize().unwrap() % 360;
+        // Big mistery: Uncommenting the following code will cause the screen to stop working. It starts, it prints to out, just no screen.
         // Even if the code is _never executed_
         // Compiler bug? Weird linker thing? I give up
         // if self.indicated_value > 10000 {
         //     let gauge_angle2: usize = (self.indicated_value * 360).try_into().unwrap();
         // }
         // let gauge_angle2: usize = (self.indicated_value * 360 / MAX_VALUE as i32 % 360).try_into().unwrap();
-        // info!("INDICATED: {} GAUGE ANGLE: {gauge_angle3}",self.indicated_value);
+        info!("INDICATED: {} SCALE_MAX: {}, GAUGE ANGLE: {gauge_angle3}",self.indicated_value, self.scaled_max);
         Line::new(context.l_point[gauge_angle3], context.n_point[gauge_angle3])
             .draw_styled(&context.needle_style, framebuffer)
             .unwrap();

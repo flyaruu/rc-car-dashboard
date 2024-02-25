@@ -80,6 +80,7 @@ pub async fn graphics_task(
                             protocol::BlinkState::LeftOn => {dashboard.set_left_blinker(LightIndicator::On); dashboard.set_right_blinker(LightIndicator::Off);},
                             protocol::BlinkState::RightOn => {dashboard.set_left_blinker(LightIndicator::Off); dashboard.set_right_blinker(LightIndicator::On);},
                             protocol::BlinkState::AllOff => {dashboard.set_left_blinker(LightIndicator::Off); dashboard.set_right_blinker(LightIndicator::Off);},
+                            protocol::BlinkState::Alarm => {dashboard.set_left_blinker(LightIndicator::On); dashboard.set_right_blinker(LightIndicator::On);},
                         }
                     },
                     _ => {},
