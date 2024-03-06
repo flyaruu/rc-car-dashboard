@@ -22,7 +22,7 @@ pub const I_P_OFFSET: u32 = 20;
 pub const I_L_OFFSET: u32 = 40;
 pub const I_N_OFFSET: u32 = 70;
 
-pub const LEFT_MAX_GAUGE_VALUE: usize = 240;
+pub const LEFT_MAX_GAUGE_VALUE: usize = 1200;
 pub const RIGHT_MAX_GAUGE_VALUE: usize = 1200;
 
 

@@ -172,40 +172,22 @@ async fn main(spawner: Spawner) {
     let esp_now = EspNow::new(&init, wifi).unwrap();
     let (_esp_manager, _esp_sender, esp_receiver) = esp_now.split();
     let command_channel: &MessageChannel = make_static!(PubSubChannel::new());
+
     delay.delay_ms(500_u32);
-    spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),spawner,rtc)).unwrap();
+    spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),command_channel.publisher().unwrap(),spawner,rtc)).unwrap();
     spawner.spawn(receiver(esp_receiver,command_channel.publisher().unwrap())).unwrap();
-    // spawner.spawn(test_speedo_telemetry(command_channel.publisher().unwrap())).unwrap();
-    // spawner.spawn(test_speedo_odo(command_channel.publisher().unwrap())).unwrap();
+    spawner.spawn(test_speedo_telemetry(command_channel.publisher().unwrap())).unwrap();
+    info!("Starting test");
 
 }
 
 
-#[embassy_executor::task]
-async fn test_speedo_odo(publisher: MessagePublisher) {
-    let mut i = 0;
-    loop {
-        publisher.publish(Message::Telemetry(TelemetryMessage::Odo(i))).await;
-        Timer::after_millis(5000).await;
-        i+=1;
-    }
-}
 
-#[embassy_executor::task]
+#[task]
 async fn test_speedo_telemetry(publisher: MessagePublisher) {
-    loop {
-        for i in 0..24 {
-            publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(i*10))).await;
-            Timer::after_millis(5000).await;
-        }
-        for i in (0..24).rev() {
-            publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(i*10))).await;
-            Timer::after_millis(500).await;
-        }
-
-    }
 }
-#[embassy_executor::task]
+
+#[task]
 async fn receiver(mut esp_receiver: EspNowReceiver<'static>, publisher: MessagePublisher)->! {
     info!("Starting receiver...");
     loop {

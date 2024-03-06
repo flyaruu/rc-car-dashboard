@@ -4,7 +4,7 @@
 use alloc::format;
 
 use embassy_executor::{task, Spawner};
-use embassy_sync::{blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex}, signal::Signal};
+use embassy_sync::{blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex}, pubsub::{publisher, Publisher}, signal::Signal};
 use embassy_time::Timer;
 use embedded_graphics::pixelcolor::Rgb565;
 use esp_hal_common::Rtc;
@@ -14,9 +14,10 @@ use hal::gpio::{Gpio6, Output, PushPull};
 
 use log::info;
 use num_traits::ToPrimitive;
+use protocol::{Message, MessagePublisher, TelemetryMessage};
 use t_display_s3_amoled::rm67162::dma::RM67162Dma;
 
-use crate::{dashboard::{Dashboard, DashboardContext}, status_screen::LightIndicator, MessageSubscriber};
+use crate::{dashboard::{Dashboard, DashboardContext}, status_screen::LightIndicator, MessageSubscriber, MAX_MESSAGES, MAX_PUBS, MAX_SUBS};
 
 pub static VALUE_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
@@ -34,6 +35,7 @@ async fn value_updater() {
 pub async fn graphics_task(
     mut display: RM67162Dma<'static,Gpio6<Output<PushPull>>>, 
     mut subscriber: MessageSubscriber,
+    publisher: Publisher<'static, NoopRawMutex, Message, MAX_MESSAGES, MAX_SUBS, MAX_PUBS>,
     spawner: Spawner,
     _rtc: &'static Rtc<'static>,
 ) {
@@ -48,6 +50,7 @@ pub async fn graphics_task(
 
     let mut dashboard: Dashboard<GAUGE_SIZE, GAUGE_SIZE, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(GAUGE_SIZE, GAUGE_SIZE) }, GAUGE_CLEAR_SIZE, STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT) },Gpio6<Output<PushPull>>> = Dashboard::new();    
     dashboard.draw_static(&dashboard_context);
+    spawner.spawn(test_speedo_odo(publisher)).unwrap();
     info!("Starting graphics loop");
     loop {
         dashboard.redraw(&mut display, &dashboard_context);
@@ -123,4 +126,18 @@ pub async fn graphics_task(
         // }
         // print!(".");
     }
+}
+
+#[task]
+async fn test_speedo_odo(publisher: Publisher<'static, NoopRawMutex, Message, MAX_MESSAGES, MAX_SUBS, MAX_PUBS>) {
+    Timer::after_millis(1000).await;
+    info!("Setting max");
+    publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(1200))).await;
+    publisher.publish(Message::Telemetry(TelemetryMessage::MotorRpm(1200))).await;
+    Timer::after_millis(1500).await;
+    info!("Setting min");
+    publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(0))).await;
+    publisher.publish(Message::Telemetry(TelemetryMessage::MotorRpm(0))).await;
+    Timer::after_millis(2000).await;
+    info!("Setting min");
 }
