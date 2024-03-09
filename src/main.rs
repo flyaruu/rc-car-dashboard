@@ -11,7 +11,6 @@ use embassy_executor::{task, Spawner};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::pubsub::{Publisher, PubSubChannel, Subscriber};
 
-use embassy_sync::signal::Signal;
 use embassy_time::Timer;
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
@@ -89,18 +88,8 @@ async fn main(spawner: Spawner) {
     info!("Setting led high");
     led.set_high().unwrap();
 
-    //===================
-
-    println!("GPIO init OK");
-
-
     println!("init display");
-
-
-
-    // println!("Hello world!");
     let wifi_timer_group = TimerGroup::new(peripherals.TIMG1, &clocks).timer0;
-    // println!("Hello world2");
     let init = initialize(
         EspWifiInitFor::Wifi,
         wifi_timer_group,
@@ -108,9 +97,6 @@ async fn main(spawner: Spawner) {
         system.radio_clock_control,
         &clocks,
     ).unwrap();
-
-
-
     
     let sclk = io.pins.gpio47;
     let rst = io.pins.gpio17;
@@ -174,17 +160,26 @@ async fn main(spawner: Spawner) {
     let command_channel: &MessageChannel = make_static!(PubSubChannel::new());
 
     delay.delay_ms(500_u32);
-    spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),command_channel.publisher().unwrap(),spawner,rtc)).unwrap();
-    spawner.spawn(receiver(esp_receiver,command_channel.publisher().unwrap())).unwrap();
-    spawner.spawn(test_speedo_telemetry(command_channel.publisher().unwrap())).unwrap();
+    spawner.spawn(graphics_task(display,command_channel.subscriber().unwrap(),spawner,rtc)).unwrap();
+    spawner.spawn(startup_sequence(esp_receiver, command_channel.publisher().unwrap(), spawner)).unwrap();
     info!("Starting test");
 
 }
 
 
-
 #[task]
-async fn test_speedo_telemetry(publisher: MessagePublisher) {
+async fn startup_sequence(esp_receiver: EspNowReceiver<'static>, publisher: Publisher<'static, NoopRawMutex, Message, MAX_MESSAGES, MAX_SUBS, MAX_PUBS>, spawner: Spawner) {
+    Timer::after_millis(1000).await;
+    info!("Setting max");
+    publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(1200))).await;
+    publisher.publish(Message::Telemetry(TelemetryMessage::MotorRpm(1200))).await;
+    Timer::after_millis(1500).await;
+    publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(0))).await;
+    publisher.publish(Message::Telemetry(TelemetryMessage::MotorRpm(0))).await;
+    Timer::after_millis(2000).await;
+    info!("Setting min");
+    spawner.spawn(receiver(esp_receiver,publisher)).unwrap();
+
 }
 
 #[task]

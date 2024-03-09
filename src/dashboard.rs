@@ -1,6 +1,5 @@
 use core::{f32::consts::PI, marker::PhantomData};
 
-use embassy_executor::Spawner;
 use embedded_graphics::{draw_target::DrawTarget, framebuffer::Framebuffer, geometry::{Dimensions, Point, Size}, mono_font::{ascii::{FONT_10X20, FONT_8X13}, MonoTextStyle, MonoTextStyleBuilder}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565, RgbColor}, primitives::{Circle, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle}};
 use embedded_hal::digital::OutputPin;
 use esp_println::println;
@@ -44,7 +43,7 @@ pub struct Dashboard<'a, const GAUGE_WIDTH: usize,
     _phantom: PhantomData<CsPin>,
 
 }
-
+#[allow(dead_code)]
 impl <'a, const GAUGE_WIDTH: usize, 
     const GAUGE_HEIGHT: usize,
     const GAUGE_FRAMEBUFFER_SIZE: usize,
@@ -135,6 +134,7 @@ impl <'a, const GAUGE_WIDTH: usize,
 }
 
 
+#[allow(dead_code)]
 pub struct DashboardContext<'a, const GAUGE_WIDTH: usize,const GAUGE_HEIGHT: usize> {
     pub outer: [Point; 360],
     pub p_point: [Point; 360],

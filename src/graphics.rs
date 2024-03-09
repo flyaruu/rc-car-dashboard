@@ -4,7 +4,7 @@
 use alloc::format;
 
 use embassy_executor::{task, Spawner};
-use embassy_sync::{blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex}, pubsub::{publisher, Publisher}, signal::Signal};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::Timer;
 use embedded_graphics::pixelcolor::Rgb565;
 use esp_hal_common::Rtc;
@@ -14,10 +14,10 @@ use hal::gpio::{Gpio6, Output, PushPull};
 
 use log::info;
 use num_traits::ToPrimitive;
-use protocol::{Message, MessagePublisher, TelemetryMessage};
+
 use t_display_s3_amoled::rm67162::dma::RM67162Dma;
 
-use crate::{dashboard::{Dashboard, DashboardContext}, status_screen::LightIndicator, MessageSubscriber, MAX_MESSAGES, MAX_PUBS, MAX_SUBS};
+use crate::{dashboard::{Dashboard, DashboardContext}, status_screen::LightIndicator, MessageSubscriber};
 
 pub static VALUE_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
@@ -35,7 +35,6 @@ async fn value_updater() {
 pub async fn graphics_task(
     mut display: RM67162Dma<'static,Gpio6<Output<PushPull>>>, 
     mut subscriber: MessageSubscriber,
-    publisher: Publisher<'static, NoopRawMutex, Message, MAX_MESSAGES, MAX_SUBS, MAX_PUBS>,
     spawner: Spawner,
     _rtc: &'static Rtc<'static>,
 ) {
@@ -50,7 +49,6 @@ pub async fn graphics_task(
 
     let mut dashboard: Dashboard<GAUGE_SIZE, GAUGE_SIZE, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(GAUGE_SIZE, GAUGE_SIZE) }, GAUGE_CLEAR_SIZE, STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT, { embedded_graphics::framebuffer::buffer_size::<Rgb565>(STATUS_SCREEN_WIDTH, STATUS_SCREEN_HEIGHT) },Gpio6<Output<PushPull>>> = Dashboard::new();    
     dashboard.draw_static(&dashboard_context);
-    spawner.spawn(test_speedo_odo(publisher)).unwrap();
     info!("Starting graphics loop");
     loop {
         dashboard.redraw(&mut display, &dashboard_context);
@@ -64,7 +62,6 @@ pub async fn graphics_task(
                 protocol::Message::Telemetry(telemetry) => match telemetry {
                     protocol::TelemetryMessage::MotorSetting(_) => {},
                     protocol::TelemetryMessage::MotorRpm(rpm) => {
-                        info!("Received motor rpm: {}",rpm);
                         dashboard.set_right_value(rpm.to_i32().unwrap());
     
                     },
@@ -72,7 +69,6 @@ pub async fn graphics_task(
                         dashboard.set_right_line2(format!("{:06}",odo.to_i32().unwrap()).as_str().into());
                     },
                     protocol::TelemetryMessage::Rpm(rpm) => {
-                        info!("Received speed rpm: {}",rpm);
                         dashboard.set_left_value(rpm.to_i32().unwrap());
                     },
                     protocol::TelemetryMessage::Odo(_) => {
@@ -99,11 +95,6 @@ pub async fn graphics_task(
                     },
                     protocol::ControlMessage::BlinkerCommand(_) => {},
                     _ => {}
-                    // protocol::ControlMessage::BrakelightCommand(_) => todo!(),
-                    // protocol::ControlMessage::ReverselightCommand(_) => todo!(),
-                    // protocol::ControlMessage::RecalibrateMotor => todo!(),
-                    // protocol::ControlMessage::SteeringPosition(_) => todo!(),
-                    // protocol::ControlMessage::MotorPower(_) => todo!(),
 
                 }
             }
@@ -112,32 +103,7 @@ pub async fn graphics_task(
             // Make sure there is at least _something_ yielding
             Timer::after_millis(1).await;
         }
-        // let now = rtc.get_time_us();
-        // speedo.draw_clear_mask(&mut framebuffer, &dashboard_context);
-        // speedo.draw_dynamic(&mut framebuffer, &dashboard_context);
-        // unsafe {
-        //     display.framebuffer_for_viewport(framebuffer.data(), speedo.bounding_box).unwrap();
-        // }
-
-        // speedo2.draw_clear_mask(&mut framebuffer, &dashboard_context);
-        // speedo2.draw_dynamic(&mut framebuffer, &dashboard_context);
-        // unsafe {
-        //     display.framebuffer_for_viewport(framebuffer.data(), speedo2.bounding_box).unwrap();
-        // }
-        // print!(".");
     }
 }
 
-#[task]
-async fn test_speedo_odo(publisher: Publisher<'static, NoopRawMutex, Message, MAX_MESSAGES, MAX_SUBS, MAX_PUBS>) {
-    Timer::after_millis(1000).await;
-    info!("Setting max");
-    publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(1200))).await;
-    publisher.publish(Message::Telemetry(TelemetryMessage::MotorRpm(1200))).await;
-    Timer::after_millis(1500).await;
-    info!("Setting min");
-    publisher.publish(Message::Telemetry(TelemetryMessage::Rpm(0))).await;
-    publisher.publish(Message::Telemetry(TelemetryMessage::MotorRpm(0))).await;
-    Timer::after_millis(2000).await;
-    info!("Setting min");
-}
+

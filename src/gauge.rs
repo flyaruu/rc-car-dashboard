@@ -5,7 +5,6 @@ use alloc::format;
 
 use embedded_graphics::{framebuffer::Framebuffer, geometry::{Angle, Point, Size}, pixelcolor::{raw::{BigEndian, RawU16}, Rgb565}, primitives::{Arc, Circle, Line, PrimitiveStyleBuilder, Rectangle, StyledDrawable}, text::Text, Drawable};
 use heapless::String;
-use log::info;
 use num_traits::ToPrimitive;
 
 use crate::dashboard::{DashboardContext, I_L_OFFSET, I_N_OFFSET, I_OUTER_OFFSET, I_P_OFFSET};
@@ -29,11 +28,9 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
 
     pub fn new_speedo(location: Point, texts: [&'a str;13], line1: String<6>, line2: String<6>)->Self {
         let size = Size::new(W as u32, H as u32);
-        // let framebuffer = Framebuffer::new();
         let max_value_scaled: u64 = (MAX_VALUE * 360 / 300).to_u64().unwrap(); // scale max value to the (300 deg) range of the gauge
         Gauge {
             bounding_box: Rectangle::new(location, size),
-            // framebuffer,
             value: 0,
             indicated_value: 0,
             texts,
@@ -55,10 +52,6 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
     pub fn set_value(&mut self, value: i32) {
         self.value = value;
     }
-    // pub fn draw(&self, framebuffer: &mut Framebuffer<Rgb565,RawU16,BigEndian,W,H,BUFFER>,  context: &DashboardContext<W,H>) {
-    //     self.draw_dial(framebuffer, context)
-    // }
-
     pub fn update_indicated(&mut self) {
         // info!("Before: Indicated: {} Value: {}",self.indicated_value,self.value);
         if self.indicated_value < self.value {
@@ -67,14 +60,9 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
         if self.indicated_value > self.value {
             self.indicated_value = max(self.indicated_value - MAX_CHANGE, self.value);            
         }
-        // info!("After: Indicated: {} Value: {}",self.indicated_value,self.value);
     }
 
-    // &mut self, 
     pub fn draw_static(&self, framebuffer: &mut Framebuffer<Rgb565,RawU16,BigEndian,W,H,BUFFER>,  context: &DashboardContext<W,H>) {
-        // self.framebuffer.
-
-
         Arc::with_center(Point { x: Self::CX, y: Self::CY }, W as u32-I_OUTER_OFFSET, Angle::from_degrees(120.0), Angle::from_degrees(300.0))
             .draw_styled(&context.outer_style, framebuffer)
             .unwrap();
@@ -127,7 +115,6 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
                     .draw(framebuffer).unwrap();
             }            
         }
-        // let gauge_angle: usize = (self.indicated_value.to_f32().unwrap() * 1.2).to_usize().unwrap() % 360;
         let gauge_angle3: usize = (self.indicated_value.to_f32().unwrap() * 360.0 / self.scaled_max.to_f32().unwrap()).to_usize().unwrap() % 360;
         // Big mistery: Uncommenting the following code will cause the screen to stop working. It starts, it prints to out, just no screen.
         // Even if the code is _never executed_
@@ -135,8 +122,6 @@ impl <'a, const W: usize,const H: usize,const BUFFER: usize, const CLEAR_RADIUS:
         // if self.indicated_value > 10000 {
         //     let gauge_angle2: usize = (self.indicated_value * 360).try_into().unwrap();
         // }
-        // let gauge_angle2: usize = (self.indicated_value * 360 / MAX_VALUE as i32 % 360).try_into().unwrap();
-        // info!("INDICATED: {} SCALE_MAX: {}, GAUGE ANGLE: {gauge_angle3}",self.indicated_value, self.scaled_max);
         Line::new(context.l_point[gauge_angle3], context.n_point[gauge_angle3])
             .draw_styled(&context.needle_style, framebuffer)
             .unwrap();
